@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Quiz Pro - Navigation Mode</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root {
+            --primary: #1a73e8;
+            --surface: #ffffff;
+            --background: #f8f9fa;
+            --text: #202124;
+            --correct: #1e8e3e;
+            --incorrect: #d93025;
+            --skipped: #f9ab00;
+            --border: #dadce0;
+        }
+
+        body {
+            font-family: 'Google Sans', Roboto, Arial, sans-serif;
+            background: var(--background);
+            color: var(--text);
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .app-container {
+            width: 100%;
+            max-width: 650px;
+            background: var(--surface);
+            border-radius: 28px;
+            padding: 35px;
+            box-shadow: 0 1px 3px rgba(60,64,67,0.3), 0 4px 8px 3px rgba(60,64,67,0.15);
+        }
+
+        textarea {
+            width: 100%; height: 200px; border-radius: 12px; border: 1px solid var(--border);
+            padding: 15px; font-family: inherit; resize: none; box-sizing: border-box;
+            font-size: 14px; line-height: 1.5; margin-top: 10px;
+        }
+
+        .quiz-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .timer-box {
+            font-weight: 500;
+            color: var(--incorrect);
+            background: #fce8e6;
+            padding: 8px 20px;
+            border-radius: 50px;
+            font-family: monospace;
+            font-size: 18px;
+        }
+
+        #quiz-screen, #result-screen { display: none; }
+        
+        .question-text { font-size: 20px; margin-bottom: 28px; font-weight: 400; line-height: 1.4; white-space: pre-wrap; }
+
+        .opt-btn {
+            width: 100%; text-align: left; padding: 18px; border: 1px solid var(--border);
+            border-radius: 16px; background: white; cursor: pointer; margin-bottom: 12px;
+            font-size: 16px; transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .opt-btn:hover { background: #f8f9fa; border-color: var(--primary); }
+        .opt-btn.selected { background: #e8f0fe; border-color: var(--primary); font-weight: 500; }
+/* Styles for immediate feedback */
+.opt-btn.correct { 
+    background-color: #e6f4ea !important; 
+    border-color: #1e8e3e !important; 
+    color: #137333 !important;
+  
+}
+
+.opt-btn.wrong { 
+    background-color: #fce8e6 !important; 
+    border-color: #d93025 !important; 
+    color: #c5221f !important;
+}
+        .progress-bar {
+            height: 6px; background: #eee; width: 100%; border-radius: 3px;
+            margin-bottom: 25px; overflow: hidden;
+        }
+        #progress-fill { height: 100%; background: var(--primary); width: 0%; transition: 0.4s; }
+
+        .nav-controls { display: flex; gap: 10px; margin-top: 20px; }
+        
+        .btn {
+            padding: 12px 28px; border-radius: 100px; border: none;
+            cursor: pointer; font-weight: 500; font-size: 15px; transition: 0.2s;
+        }
+        .btn-primary { background: var(--primary); color: white; }
+        .btn-outline { background: transparent; border: 1px solid var(--border); color: var(--primary); }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        /* Result Styles */
+        .stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; margin: 20px 0; }
+        .stat-card { padding: 15px; border-radius: 12px; text-align: center; }
+        .stat-card.c { background: #e6f4ea; color: var(--correct); }
+        .stat-card.w { background: #fce8e6; color: var(--incorrect); }
+        .stat-card.s { background: #fff4e5; color: var(--skipped); }
+        .stat-num { font-size: 24px; font-weight: bold; display: block; }
+        #accuracy-img { width: 100px; height: 100px; object-fit: contain; border-radius: 50%; }
+
+        .review-container { margin-top: 30px; text-align: left; border-top: 2px solid var(--border); padding-top: 25px; display: none; }
+        .review-item { padding: 15px; border-bottom: 1px solid #eee; margin-bottom: 15px; }
+        .review-q { font-weight: 500; margin-bottom: 10px; display: block; font-size: 16px; }
+        .review-feedback { font-size: 14px; padding: 10px; border-radius: 8px; display: block; line-height: 1.4; }
+        .rev-correct { background: #e6f4ea; color: #137333; border: 1px solid #ceead6; }
+        .rev-wrong { background: #fce8e6; color: #c5221f; border: 1px solid #fad2cf; }
+        .rev-skipped { background: #fff4e5; color: #664d00; border: 1px solid #ffe1bb; }
+    </style>
+</head>
+<body>
+
+<div class="app-container">
+    <div id="setup-screen">
+        <h2 style="margin-top:0">Quiz Session</h2>
+        <textarea id="raw-input" placeholder="Paste questions here..."></textarea>
+        <div style="margin: 20px 0; display: flex; align-items: center; gap: 15px;">
+            <input type="checkbox" id="timer-toggle" checked>
+            <label>Timer (Minutes): </label>
+            <input type="number" id="time-limit" value="5" min="1" style="width: 60px; padding: 5px;">
+        </div>
+        <button class="btn btn-primary" style="width: 100%;" onclick="startSession()">Start Quiz</button>
+    <button class="btn btn-outline" style="width: 100%; margin-top: 10px;" onclick="generateShareLink()">
+     Friends
+</button>
+    </div>
+
+    <div id="quiz-screen">
+        <div class="quiz-header">
+            <span id="q-status">Question 1</span>
+            <div class="timer-box" id="clock">00:00</div>
+        </div>
+        <div class="progress-bar"><div id="progress-fill"></div></div>
+        <div class="question-text" id="q-display"></div>
+        <div id="options-area"></div>
+        
+        <div class="nav-controls">
+            <button class="btn btn-outline" id="prev-btn" onclick="prevQuestion()" style="flex: 1;">Back</button>
+            <button class="btn btn-primary" id="next-btn" onclick="nextQuestion()" style="flex: 1;">Next</button>
+        </div>
+    </div>
+
+    <div id="result-screen" style="text-align: center;">
+    <h2> রেজাল্ট</h2> 
+    <button class="btn btn-fb" style="background:#1877f2; color:white; width: 100%; margin-bottom: 10px;" onclick="challengeFriends()">
+    🎮 Challenge Friends to Beat Me!
+</button>
+    <div style="position: relative; width: 150px; margin: 0 auto 10px auto;">
+        <canvas id="resultChart" width="150" height="150"></canvas>
+        <img id="accuracy-img" src="" alt="Achievement" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);">
+    </div>
+    <div style="font-size: 48px; color: var(--primary); font-weight: 300;" id="score-val">0 / 0</div>
+    <p id="percentage-val" style="font-weight: 500; color: #5f6368; margin-bottom: 20px;"></p>
+    
+    <div class="stats-grid">
+        <div class="stat-card c"><span class="stat-num" id="stat-c">0</span>Correct</div>
+        <div class="stat-card w"><span class="stat-num" id="stat-w">0</span>Wrong</div>
+        <div class="stat-card s"><span class="stat-num" id="stat-s">0</span>Skipped</div>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 10px; margin-top: 20px;">
+        <button class="btn btn-fb" style="background:#1877f2; color:white;" onclick="shareToFacebook()">Share to Facebook</button>
+        <div style="display: flex; gap: 10px;">
+            <button class="btn btn-primary" style="flex: 1;" onclick="restartSameQuiz()">Try Again</button>
+             <button class="btn btn-outline" style="flex: 1;" onclick="showReview()">Review Answers</button>
+        </div>
+       
+    </div>
+    <div id="review-area" class="review-container"></div>
+</div>
+</div>
+
+<script>
+    let questions = [];
+    let currentIdx = 0;
+    let userSelections = []; 
+    let secondsLeft = 0;
+    let timerRef;
+    let chartInstance = null;
+// --- ENCODING UTILITIES (Crucial for GitHub & Bengali) ---
+    function b64EncodeUnicode(str) {
+        return btoa(encodeURIComponent(str).replace(/%([0-9A-F]{2})/g, (match, p1) => 
+            String.fromCharCode('0x' + p1)
+        ));
+    }
+
+    function b64DecodeUnicode(str) {
+        return decodeURIComponent(atob(str).split('').map(c => 
+            '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)
+        ).join(''));
+    }
+
+  
+
+    function fallbackCopy(text) {
+        const dummy = document.createElement("textarea");
+        document.body.appendChild(dummy);
+        dummy.value = text;
+        dummy.select();
+        const success = document.execCommand("copy");
+        document.body.removeChild(dummy);
+        if(success) alert("✅ Link copied to clipboard!");
+        else alert("Failed to copy. Please copy the URL from your browser address bar manually.");
+    }
+    function startSession() {
+        const text = document.getElementById('raw-input').value.trim();
+        if (!text) return alert("Please paste some questions!");
+
+        questions = [];
+        const lines = text.split('\n').map(l => l.trim()).filter(l => l !== "");
+        const optPattern = /^[A-Za-zক-হ\u0980-\u09FF][\s\)\.\-]/;
+        const ansPattern = /^(answer|answer\s*:|উত্তর\s*:)/i;
+
+        for (let i = 0; i < lines.length; i++) {
+            if (ansPattern.test(lines[i])) {
+                const markerMatch = lines[i].match(/^(?:answer|উত্তর)\s*:\s*([^\s\)\.\-]+)/i);
+                const ansLabel = markerMatch ? markerMatch[1].trim() : "";
+                let foundOpts = [];
+                let lookback = 1;
+                while (foundOpts.length < 6 && (i - lookback) >= 0) {
+                    let currentLine = lines[i - lookback];
+                    if (ansPattern.test(currentLine)) break;
+                    if (optPattern.test(currentLine)) foundOpts.unshift(currentLine);
+                    lookback++;
+                }
+                let corIdx = foundOpts.findIndex(opt => opt.split(/[\)\.\s\-]/)[0].trim().toUpperCase() === ansLabel.toUpperCase());
+                let qStart = 0;
+                for (let j = i - lookback; j >= 0; j--) { if (ansPattern.test(lines[j])) { qStart = j + 1; break; } }
+                const qText = lines.slice(qStart, i - lookback + (lookback - foundOpts.length)).join('\n');
+                if (foundOpts.length >= 2 && corIdx !== -1) questions.push({ q: qText || "Question", opts: foundOpts, cor: corIdx });
+            }
+        }
+
+        if (questions.length === 0) return alert("Format not recognized!");
+        initQuizState();
+    }
+
+    function initQuizState() {
+        userSelections = new Array(questions.length).fill(null);
+        currentIdx = 0;
+        document.getElementById('setup-screen').style.display = 'none';
+        document.getElementById('result-screen').style.display = 'none';
+        document.getElementById('review-area').style.display = 'none';
+        document.getElementById('quiz-screen').style.display = 'block';
+        
+        if (document.getElementById('timer-toggle').checked) {
+            secondsLeft = document.getElementById('time-limit').value * 60;
+            if(timerRef) clearInterval(timerRef);
+            runTimer();
+        } else { document.getElementById('clock').style.display = 'none'; }
+        
+        renderCurrent();
+    }
+function selectOption(index) {
+    const data = questions[currentIdx];
+    const buttons = document.getElementById('options-area').querySelectorAll('.opt-btn');
+    
+    // Record the selection
+    userSelections[currentIdx] = index;
+
+    // Apply colors to all buttons to show the result
+    buttons.forEach((btn, i) => {
+        btn.disabled = true; // Prevent clicking other options
+        if (i === data.cor) {
+            btn.classList.add('correct'); // Highlight correct answer in green
+        } else if (i === index) {
+            btn.classList.add('wrong'); // If user chose wrong, highlight in red
+        }
+    });
+
+    // Wait 1 second so the user can see the feedback, then move on
+    setTimeout(() => {
+        if (currentIdx < questions.length - 1) {
+            currentIdx++;
+            renderCurrent();
+        } else {
+            finishSession();
+        }
+    }, 800);
+}
+  function renderCurrent() {
+    const data = questions[currentIdx];
+    document.getElementById('q-display').innerText = data.q;
+    document.getElementById('q-status').innerText = `Question ${currentIdx + 1} of ${questions.length}`;
+    document.getElementById('progress-fill').style.width = `${((currentIdx + 1) / questions.length) * 100}%`;
+    
+    const area = document.getElementById('options-area');
+    area.innerHTML = '';
+    data.opts.forEach((text, i) => {
+        const btn = document.createElement('button');
+        btn.className = 'opt-btn'; 
+        btn.innerText = text;
+        btn.disabled = false; // Ensure buttons are clickable
+        btn.onclick = () => selectOption(i);
+        area.appendChild(btn);
+    });
+
+
+        // Update Nav Buttons
+        document.getElementById('prev-btn').disabled = (currentIdx === 0);
+        document.getElementById('next-btn').innerText = (currentIdx === questions.length - 1) ? "Finish" : "Next";
+    }
+
+    function nextQuestion() {
+        if (currentIdx < questions.length - 1) {
+            currentIdx++;
+            renderCurrent();
+        } else {
+            finishSession();
+        }
+    }
+
+    function prevQuestion() {
+        if (currentIdx > 0) {
+            currentIdx--;
+            renderCurrent();
+        }
+    }
+
+    function restartSameQuiz() {
+        initQuizState();
+    }
+
+    function runTimer() {
+        timerRef = setInterval(() => {
+            secondsLeft--;
+            const m = Math.floor(secondsLeft / 60);
+            const s = secondsLeft % 60;
+            document.getElementById('clock').innerText = `${m}:${s.toString().padStart(2, '0')}`;
+            if (secondsLeft <= 0) {
+                clearInterval(timerRef);
+                alert("Time is up!");
+                finishSession();
+            }
+        }, 1000);
+    }
+
+    function finishSession() {
+        clearInterval(timerRef);
+        let correct = 0, wrong = 0, skipped = 0;
+        let reviewHTML = '<h3>Detailed Review</h3>';
+        
+        userSelections.forEach((val, i) => {
+            const q = questions[i];
+            let status = '', msg = '';
+            if (val === null) { 
+                skipped++; status = 'rev-skipped'; msg = `Skipped. Correct: ${q.opts[q.cor]}`; 
+            } else if (val === q.cor) { 
+                correct++; status = 'rev-correct'; msg = `Correct! Ans: ${q.opts[val]}`; 
+            } else { 
+                wrong++; status = 'rev-wrong'; msg = `You chose: ${q.opts[val]} | Correct: ${q.opts[q.cor]}`; 
+            }
+            reviewHTML += `<div class="review-item"><span class="review-q">${i+1}. ${q.q}</span><span class="review-feedback ${status}">${msg}</span></div>`;
+        });
+
+        const accuracy = Math.round((correct / questions.length) * 100);
+        document.getElementById('accuracy-img').src = "https://api.dicebear.com/7.x/bottts/svg?seed=" + accuracy;
+
+        document.getElementById('review-area').innerHTML = reviewHTML;
+        document.getElementById('quiz-screen').style.display = 'none';
+        document.getElementById('result-screen').style.display = 'block';
+        document.getElementById('score-val').innerText = `${correct} / ${questions.length}`;
+        document.getElementById('percentage-val').innerText = `${accuracy}% Accuracy`;
+        document.getElementById('stat-c').innerText = correct; 
+        document.getElementById('stat-w').innerText = wrong; 
+        document.getElementById('stat-s').innerText = skipped;
+
+        if(chartInstance) chartInstance.destroy();
+        chartInstance = new Chart(document.getElementById('resultChart'), {
+            type: 'doughnut',
+            data: { datasets: [{ data: [correct, wrong, skipped], backgroundColor: ['#1e8e3e', '#d93025', '#f9ab00'], borderWidth: 0 }] },
+            options: { cutout: '80%', plugins: { legend: { display: false } } }
+        });
+    }
+    function challengeFriends() {
+    const score = document.getElementById('score-val').innerText;
+    const acc = document.getElementById('percentage-val').innerText;
+    
+    // Custom challenge message
+    const challengeText = `🔥 I just scored ${score} (${acc}) on this quiz! \n\nCan you beat my score? Click the link to try it yourself! 🏆`;
+    
+    // Use your hosted URL here so friends can actually play
+    const appUrl = window.location.href.startsWith('http') ? window.location.href : "https://your-quiz-link.com";
+    
+    const fbUrl = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(appUrl)}&quote=${encodeURIComponent(challengeText)}`;
+    
+    window.open(fbUrl, '_blank', 'width=600,height=400');
+}
+function restartSameQuiz() {
+    // Hide results, show quiz screen
+    document.getElementById('result-screen').style.display = 'none';
+    document.getElementById('quiz-screen').style.display = 'block';
+    
+    // Reset variables
+    currentIdx = 0;
+    userSelections = new Array(questions.length).fill(null);
+    
+    // Restart timer and render
+    if (document.getElementById('timer-toggle').checked) {
+        clearInterval(timerRef);
+        secondsLeft = document.getElementById('time-limit').value * 60;
+        runTimer();
+    }
+    renderCurrent();
+}
+
+function shareToFacebook() {
+    const score = document.getElementById('score-val').innerText;
+    const acc = document.getElementById('percentage-val').innerText;
+    const text = ` রেজাল্ট:\nস্কোর: ${score}\nনির্ভুলতা: ${acc}`;
+    
+    // Note: FB sharing works best if the file is hosted online (GitHub/Netlify)
+    const url = window.location.href.startsWith('http') ? window.location.href : "https://your-quiz-link.com";
+    const fbUrl = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}&quote=${encodeURIComponent(text)}`;
+    window.open(fbUrl, '_blank', 'width=600,height=400');
+}
+    function showReview() {
+        const area = document.getElementById('review-area');
+        area.style.display = 'block'; 
+        area.scrollIntoView({ behavior: 'smooth' });
+    }
+  function generateShareLink() {
+    const rawText = document.getElementById('raw-input').value.trim();
+    const timeLimit = document.getElementById('time-limit').value;
+
+    if (!rawText) return alert("Please paste questions first!");
+
+    // Encode text safely for URLs (Handles Bengali/Special Chars)
+    const encodedQuiz = b64EncodeUnicode(rawText);
+    
+    // Construct the URL
+    const url = new URL(window.location.href.split('?')[0]); // Get base URL without old params
+    url.searchParams.set('quiz', encodedQuiz);
+    url.searchParams.set('time', timeLimit);
+    
+    const shareUrl = url.toString();
+
+    navigator.clipboard.writeText(shareUrl).then(() => {
+        alert("✅ Quiz Link Copied! Send this to your friend.");
+    }).catch(() => {
+        alert("Link: " + shareUrl); // Fallback if clipboard fails
+    });
+}
+window.onload = function() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const quizData = urlParams.get('quiz');
+    const timeData = urlParams.get('time');
+
+    if (quizData) {
+        try {
+            // 1. Hide the setup screen immediately so it looks like a new page
+            document.getElementById('setup-screen').style.display = 'none';
+            
+            // 2. Decode and put the text into the raw-input box
+            const decodedText = b64DecodeUnicode(quizData);
+            document.getElementById('raw-input').value = decodedText;
+            
+            // 3. Set the time from the link
+            if (timeData) {
+                document.getElementById('time-limit').value = timeData;
+            }
+            
+            // 4. Start the quiz processing
+            startSession(); 
+
+        } catch (e) {
+            console.error("Decoding failed", e);
+            document.getElementById('setup-screen').style.display = 'block';
+        }
+    }
+};
+</script>
+</body>
+</html>
